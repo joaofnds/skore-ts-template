@@ -1,0 +1,11 @@
+[
+  {
+    "_id": {
+      "$oid": "5f75f131cc7e14eae04a6a18"
+    },
+    "author": "Et Bilu",
+    "created_at": 1601496610618,
+    "deleted_at": null,
+    "name": "skore-ts"
+  }
+]

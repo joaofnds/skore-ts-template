@@ -1,0 +1,126 @@
+name: On push main
+
+on:
+  push:
+    branches:
+      - main
+env:
+  PROJECT_ID: k8s-skore-prod
+  IMAGE: skore-one
+
+jobs:
+  build_and_deploy:
+    name: Build and deploy to production
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - name: Fetch git history
+        run: git fetch --prune --unshallow
+
+      - name: Setup git config
+        run: |
+          git config user.email apps@skore.io
+          git config user.name Apps Skore
+          git config user.password ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Java for sonarqube scanner
+        uses: actions/setup-java@v1
+        with:
+          java-version: '11.x'
+
+      - name: Setup Node 14
+        uses: actions/setup-node@v1
+        with:
+          node-version: '14.x'
+
+      - name: Setup sonar-scanner
+        uses: warchant/setup-sonar-scanner@v3
+
+      - name: NPM cache
+        uses: actions/cache@v1
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      - name: Dependencies
+        run: npm install
+
+      - name: Setup Test Dependencies
+        run: |
+          docker-compose up -d mongodb redis
+
+      - name: Tests
+        run: |
+          npm test
+
+      - name: SonarQube
+        run: sonar-scanner
+          -Dsonar.host.url=https://sonarqube.skore.dev
+          -Dsonar.javascript.lcov.reportPaths=coverage/offline/lcov.info
+          -Dsonar.login=${{ secrets.SONARQUBE_KEY }}
+          -Dsonar.projectKey=${{ github.event.repository.name }}
+          -Dsonar.sources=src
+          -Dsonar.tests=test
+          -Dsonar.test.inclusions='test/**/*.test.ts'
+          -Dsonar.cpd.exclusions='**/*.test.ts'
+          -Dsonar.coverage.exclusions='**/*index.ts,**/*app.module.ts,**/*.dto.ts,**/*.test.ts'
+          -Dsonar.testExecutionReportPaths=coverage/offline/test-reporter.xml
+          -Dsonar.branch.name=main
+
+      - name: Publish release
+        run: npx release-it
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retrieve version
+        run: echo "RELEASE=$(cat package.json|jq -r '.version')" >> $GITHUB_ENV
+
+      - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
+        with:
+          version: '290.0.1'
+          service_account_key: ${{ secrets.GCP_SA_REGISTRY_PROD }}
+          project_id: ${{ secrets.GKE_PROJECT }}
+
+      - run: gcloud --quiet auth configure-docker
+
+      - name: Build
+        run: docker build --tag "gcr.io/$PROJECT_ID/$IMAGE:$RELEASE" .
+
+      - name: Publish
+        run: docker push "gcr.io/$PROJECT_ID/$IMAGE:$RELEASE"
+
+      - name: Set k8s credentials
+        run: echo "${{ secrets.K8S_CREDENTIALS_PROD }}" > kube_config
+
+      - name: Deploy application
+        run: |-
+          cat .k8s/deployment_web.tpl.yaml | sed "s|##IMAGE##|gcr.io/$PROJECT_ID/$IMAGE:$RELEASE|g" | kubectl apply -f -
+          kubectl apply -f .k8s/service.yaml
+          cat .k8s/nginx-ingress.tpl.yaml | sed "s|##APP_URL##|skore-one.skore.ai|g" | kubectl apply -f -
+        env:
+          KUBECONFIG: kube_config
+
+      - name: Deploy crons
+        run: |-
+          cat .k8s/cronjob.tpl.yaml | sed "s|##NAME##|connector-job-xp|g" |sed "s|##PERIOD##|*/10 * * * *|g" |sed "s|##PATH##|connectors/skore/5f0e164a1cacb21caded6f84|g" | kubectl apply -f -
+          cat .k8s/cronjob.tpl.yaml | sed "s|##NAME##|connector-job-skore|g" |sed "s|##PERIOD##|*/10 * * * *|g" |sed "s|##PATH##|connectors/skore/5f0498070bfd264e7662b434|g" | kubectl apply -f -
+          cat .k8s/cronjob.tpl.yaml | sed "s|##NAME##|connector-job-migration|g" |sed "s|##PERIOD##|*/10 * * * *|g" |sed "s|##PATH##|connectors/skore/5f43d2b9fccbe608d6031df7|g" | kubectl apply -f -
+        env:
+          KUBECONFIG: kube_config
+
+      - name: Rebase develop
+        run: |
+          git reset --hard
+          git checkout develop
+          git pull --rebase origin main
+          git push

@@ -1,0 +1,54 @@
+version: '3.7'
+
+services:
+  mongodb:
+    container_name: mongodb
+    environment:
+      - MONGO_INITDB_DATABASE=template
+      - MONGO_INITDB_ROOT_USERNAME=skore-ts
+      - MONGO_INITDB_ROOT_PASSWORD=skore-ts
+    image: mongo:4.2.8
+    restart: always
+    networks:
+      - skore-ts-stack
+    ports:
+      - 27017:27017
+    command: mongod --setParameter notablescan=1
+
+  redis:
+    container_name: redis
+    command: redis-server --requirepass redispassword
+    image: redis:5.0.9-alpine
+    networks:
+      - skore-ts-stack
+    ports:
+      - 6379:6379
+
+  seed:
+    build: ./.seed
+    depends_on:
+      - mongodb
+    networks:
+      - skore-ts-stack
+    restart: on-failure
+
+  skore:
+    build: ./
+    environment:
+      - NODE_PATH=.
+      - NODE_ENV=dev
+    networks:
+      - skore-ts-stack
+    restart: on-failure
+    mem_limit: 7GB
+    cpus: '2'
+
+  k6:
+    image: loadimpact/k6
+    networks:
+      - skore-ts-stack
+    volumes:
+      - ${PWD}/test/load:/load
+
+networks:
+  skore-ts-stack:

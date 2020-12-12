@@ -1,0 +1,73 @@
+name: On pull request
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  pr_analysis:
+    name: PR Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Fetch git history
+        run: git fetch --prune --unshallow
+
+      - name: Setup Java 11
+        uses: actions/setup-java@v1
+        with:
+          java-version: '11.x'
+
+      - name: Setup Node 14
+        uses: actions/setup-node@v1
+        with:
+          node-version: '14.x'
+
+      - name: Setup sonar-scanner
+        uses: warchant/setup-sonar-scanner@v3
+
+      - name: Cache node modules
+        uses: actions/cache@v1
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+
+      - name: Dependencies
+        run: npm install
+
+      - name: Setup Test Dependencies
+        run: |
+          docker-compose up -d mongodb redis
+
+      - name: Tests
+        run: |
+          npm test
+
+      - name: Integration Tests
+        run: npm run test:integration
+
+      - name: SonarQube
+        run: sonar-scanner
+          -Dsonar.host.url=https://sonarqube.skore.dev
+          -Dsonar.javascript.lcov.reportPaths=coverage/offline/lcov.info,coverage/integration/lcov.info
+          -Dsonar.login=${{ secrets.SONARQUBE_KEY }}
+          -Dsonar.projectKey=${{ github.event.repository.name }}
+          -Dsonar.sources=src
+          -Dsonar.tests=test
+          -Dsonar.test.inclusions='test/**/*.test.ts'
+          -Dsonar.coverage.exclusions='**/*index.ts,**/*app.module.ts,main.ts,**/*.dto.ts,**/*.test.ts'
+          -Dsonar.cpd.exclusions='**/*.test.ts'
+          -Dsonar.testExecutionReportPaths=coverage/offline/test-reporter.xml,coverage/integration/test-reporter.xml
+          -Dsonar.pullrequest.key=${{ github.event.number }}
+          -Dsonar.pullrequest.branch=${{ github.event.pull_request.head.ref }}
+          -Dsonar.pullrequest.base=develop
+          -Dsonar.scm.revision=${{ github.event.pull_request.head.sha }}
