@@ -8,8 +8,8 @@ env:
   PROJECT_ID: k8s-skore-dev
   GKE_CLUSTER: k8s-skore-dev
   GKE_ZONE: us-east1-d
-  DEPLOYMENT_NAME: skore-one
-  IMAGE: skore-one
+  DEPLOYMENT_NAME: skore-ts-template
+  IMAGE: skore-ts-template
 
 jobs:
   build_and_deploy:
@@ -26,9 +26,9 @@ jobs:
 
       - name: Setup git config
         run: |
-          git config user.email apps@skore.io
-          git config user.name Apps Skore
-          git config user.password ${{ secrets.GITHUB_TOKEN }}
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/$GITHUB_REPOSITORY
 
       - name: Setup Java for sonarqube scanner
         uses: actions/setup-java@v1
@@ -66,13 +66,10 @@ jobs:
         run: |
           npm test
 
-      - name: Integration Tests
-        run: npm run test:integration
-
       - name: SonarQube
         run: sonar-scanner
-          -Dsonar.host.url=https://sonarqube.skore.dev
-          -Dsonar.javascript.lcov.reportPaths=coverage/offline/lcov.info,coverage/integration/lcov.info
+          -Dsonar.host.url=##SONARQUBE_URL##
+          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
           -Dsonar.login=${{ secrets.SONARQUBE_KEY }}
           -Dsonar.projectKey=${{ github.event.repository.name }}
           -Dsonar.sources=src
@@ -80,7 +77,7 @@ jobs:
           -Dsonar.cpd.exclusions='**/*.test.ts'
           -Dsonar.test.inclusions='test/**/*.test.ts'
           -Dsonar.coverage.exclusions='**/*index.ts,**/*app.module.ts,**/*.dto.ts,**/*.test.ts'
-          -Dsonar.testExecutionReportPaths=coverage/offline/test-reporter.xml,coverage/integration/test-reporter.xml
+          -Dsonar.testExecutionReportPaths=coverage/test-reporter.xml
           -Dsonar.branch.name=develop
 
       - name: Publish release
@@ -112,14 +109,6 @@ jobs:
         run: |-
           cat .k8s/deployment_web.tpl.yaml | sed "s|##IMAGE##|gcr.io/$PROJECT_ID/$IMAGE:$RELEASE|g" | kubectl apply -f -
           kubectl apply -f .k8s/service.yaml
-          cat .k8s/nginx-ingress.tpl.yaml | sed "s|##APP_URL##|skore-one.skore.dev|g" | kubectl apply -f -
-        env:
-          KUBECONFIG: kube_config
-
-      - name: Deploy crons
-        run: |-
-          cat .k8s/cronjob.tpl.yaml | sed "s|##NAME##|connector-job-xp|g" |sed "s|##PERIOD##|*/10 * * * *|g" |sed "s|{PATH}|connectors/skore/5f0e164a1cacb21caded6f84|g" | kubectl apply -f -
-          cat .k8s/cronjob.tpl.yaml | sed "s|##NAME##|connector-job-skore|g" |sed "s|##PERIOD##|*/10 * * * *|g" |sed "s|{PATH}|connectors/skore/5f0498070bfd264e7662b434|g" | kubectl apply -f -
-          cat .k8s/cronjob.tpl.yaml | sed "s|##NAME##|connector-job-migration|g" |sed "s|##PERIOD##|*/10 * * * *|g" |sed "s|{PATH}|connectors/skore/5f43d2b9fccbe608d6031df7|g" | kubectl apply -f -
+          cat .k8s/nginx-ingress.tpl.yaml | sed "s|##APP_URL##|skore-ts-template.skore.dev|g" | kubectl apply -f -
         env:
           KUBECONFIG: kube_config

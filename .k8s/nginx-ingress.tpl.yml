@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: skore-ts-template-ingress
+  namespace: skore-ts-template
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: 'letsencrypt-prod'
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
+spec:
+  rules:
+    - host: ##APP_URL##
+      http:
+        paths:
+          - backend:
+              serviceName: skore-ts-template-svc
+              servicePort: 80
+  tls:
+    - hosts:
+        -  ##APP_URL##
+      secretName: ##APP_URL##-tls
