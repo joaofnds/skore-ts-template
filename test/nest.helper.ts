@@ -12,7 +12,7 @@ export class NestHelper {
 
   async init(): Promise<NestHelper> {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
+      imports: [AppModule.register(false)],
     }).compile()
 
     this.app = await moduleRef.createNestApplication().init()
