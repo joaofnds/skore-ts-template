@@ -86,7 +86,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Retrieve version
-        run: echo "RELEASE=$(cat package.json|jq -r '.version')" >> $GITHUB_ENV
+        run: echo "RELEASE=$(jq -r '.version' package.json)" >> $GITHUB_ENV
 
       - uses: GoogleCloudPlatform/github-actions/setup-gcloud@master
         with:
@@ -107,8 +107,8 @@ jobs:
 
       - name: Deploy application
         run: |-
-          cat .k8s/deployment_web.tpl.yaml | sed "s|##IMAGE##|gcr.io/$PROJECT_ID/$IMAGE:$RELEASE|g" | kubectl apply -f -
+          sed "s|##IMAGE##|gcr.io/$PROJECT_ID/$IMAGE:$RELEASE|g" .k8s/deployment_web.tpl.yaml | kubectl apply -f -
           kubectl apply -f .k8s/service.yaml
-          cat .k8s/nginx-ingress.tpl.yaml | sed "s|##APP_URL##|skore-ts-template.skore.dev|g" | kubectl apply -f -
+          sed "s|##APP_URL##|skore-ts-template.skore.dev|g" .k8s/nginx-ingress.tpl.yaml | kubectl apply -f -
         env:
           KUBECONFIG: kube_config
