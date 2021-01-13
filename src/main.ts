@@ -45,7 +45,7 @@ if (cluster.isWorker) {
 
     const server = app.getHttpAdapter()
     server.get('/', (_, res) => res.send('ok'))
-    server.get('/_ah/health', (_, res) => res.send('ok'))
+    server.get('/health', (_, res) => res.send('ok'))
 
     await app.listen(process.env.PORT || 3000)
   }

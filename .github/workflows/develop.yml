@@ -97,7 +97,7 @@ jobs:
       - run: gcloud --quiet auth configure-docker
 
       - name: Build
-        run: docker build --tag "gcr.io/$PROJECT_ID/$IMAGE:$RELEASE" .
+        run: docker build --tag "gcr.io/$PROJECT_ID/$IMAGE:$RELEASE" --build-arg NODE_AUTH_TOKEN=${{secrets.GH_TOKEN}} .
 
       - name: Publish
         run: docker push "gcr.io/$PROJECT_ID/$IMAGE:$RELEASE"
@@ -107,8 +107,8 @@ jobs:
 
       - name: Deploy application
         run: |-
-          sed "s|##IMAGE##|gcr.io/$PROJECT_ID/$IMAGE:$RELEASE|g" .k8s/deployment_web.tpl.yaml | kubectl apply -f -
-          kubectl apply -f .k8s/service.yaml
-          sed "s|##APP_URL##|skore-ts-template.skore.dev|g" .k8s/nginx-ingress.tpl.yaml | kubectl apply -f -
+          sed "s|##IMAGE##|gcr.io/$PROJECT_ID/$IMAGE:$RELEASE|g" .k8s/deployment_web.tpl.yml | kubectl apply -f -
+          kubectl apply -f .k8s/service.yml
+          sed "s|##APP_URL##|skore-ts-template.skore.dev|g" .k8s/nginx-ingress.tpl.yml | kubectl apply -f -
         env:
           KUBECONFIG: kube_config
